@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Stock 📦 - v3.5</title>
+    <style>
+        :root { --primary: #6366f1; --danger: #e11d48; --success: #10b981; --bg: #f8fafc; --dark: #0f172a; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); margin: 0; }
+        nav { background: var(--dark); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
+        
+        .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+        .card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 2rem; }
+        h2 { margin-top: 0; font-size: 1.2rem; color: var(--dark); display: flex; align-items: center; gap: 8px; }
+
+        /* Formulário Responsivo */
+        .grid-form { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); 
+            gap: 10px; 
+            margin: 1.5rem 0; 
+        }
+        input, select { padding: 0.8rem; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; font-size: 0.9rem; }
+        input:focus { border-color: var(--primary); }
+        
+        .btn-add { background: var(--primary); color: white; border: none; padding: 0.8rem; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        /* Tabela */
+        .table-area { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; padding: 12px; background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+
+        .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: bold; cursor: default; }
+        .badge-low { background: #fff1f2; color: var(--danger); cursor: pointer; border: 1px solid #fecaca; }
+        .badge-low:hover { background: #fee2e2; }
+        .badge-ok { background: #f0fdf4; color: var(--success); }
+        
+        .btn-del { background: none; border: none; cursor: pointer; font-size: 1.1rem; }
+
+        @media (max-width: 600px) {
+            .grid-form { grid-template-columns: 1fr; }
+            nav { flex-direction: column; gap: 10px; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <strong>📦 GESTÃO DE STOCK v3.5</strong>
+    <div>
+        <a href="/" style="color:white; text-decoration:none; margin-right:15px;">🏠 Caixa</a>
+        <a href="/financeiro" style="color:white; text-decoration:none">💰 Financeiro</a>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="card">
+        <h2 id="titulo-form">✨ Adicionar/Repor Produto</h2>
+        <div class="grid-form">
+            <input type="text" id="p-nome" placeholder="Nome do Produto">
+            <input type="text" id="p-cod" placeholder="Código/EAN">
+            <input type="number" id="p-custo" placeholder="Preço Custo (R$)" step="0.01">
+            <input type="number" id="p-venda" placeholder="Preço Venda (R$)" step="0.01">
+            <input type="number" id="p-qtd" placeholder="Qtd em Stock">
+            <button class="btn-add" id="btn-salvar" onclick="salvarProduto()">💾 SALVAR</button>
+        </div>
+
+        <div class="table-area">
+            <table id="tab-produtos">
+                <thead>
+                    <tr>
+                        <th>Produto</th>
+                        <th>Custo</th>
+                        <th>Venda</th>
+                        <th>Margem</th>
+                        <th>Qtd</th>
+                        <th>Status</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>👥 Funcionários e Admins</h2>
+        <div class="grid-form">
+            <input type="text" id="u-nome" placeholder="Nome Completo">
+            <input type="text" id="u-login" placeholder="Utilizador">
+            <input type="password" id="u-senha" placeholder="Senha">
+            <select id="u-cargo">
+                <option value="vendedor">Vendedor</option>
+                <option value="admin">Administrador</option>
+            </select>
+            <button class="btn-add" onclick="salvarUsuario()">👤 CADASTRAR</button>
+        </div>
+        <table id="tab-usuarios">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Login</th>
+                    <th>Nível</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function carregar() {
+        // Carregar Produtos
+        const resP = await fetch('/lista-estoque');
+        const produtos = await resP.json();
+        document.querySelector('#tab-produtos tbody').innerHTML = produtos.map(p => {
+            const isLow = p.estoque < 5;
+            const margem = p.preco - p.preco_custo;
+            // Corrigido: p._id para MongoDB e p.id para compatibilidade
+            const idParaExcluir = p._id || p.id;
+            
+            return `
+                <tr>
+                    <td><strong>${p.nome}</strong><br><small style="color:#94a3b8">${p.codigo_barras}</small></td>
+                    <td style="color:#64748b">R$ ${p.preco_custo.toFixed(2)}</td>
+                    <td style="color:var(--primary); font-weight:bold">R$ ${p.preco.toFixed(2)}</td>
+                    <td style="color:var(--success)">+R$ ${margem.toFixed(2)}</td>
+                    <td style="font-weight:bold">${p.estoque}</td>
+                    <td>
+                        <span class="badge ${isLow ? 'badge-low' : 'badge-ok'}" 
+                              onclick="${isLow ? `prepararEdicao('${p.nome}', '${p.codigo_barras}', ${p.preco_custo}, ${p.preco}, ${p.estoque})` : ''}">
+                            ${isLow ? '🚨 REPOR' : '✅ ESTÁVEL'}
+                        </span>
+                    </td>
+                    <td><button class="btn-del" onclick="excluirProd('${idParaExcluir}')">🗑️</button></td>
+                </tr>`;
+        }).join('');
+
+        // Carregar Utilizadores
+        const resU = await fetch('/lista-usuarios');
+        const users = await resU.json();
+        document.querySelector('#tab-usuarios tbody').innerHTML = users.map(u => {
+            const idU = u._id || u.id;
+            return `
+                <tr>
+                    <td>${u.nome}</td>
+                    <td>${u.login}</td>
+                    <td><span class="badge" style="background:#e2e8f0; color:#475569">${u.cargo.toUpperCase()}</span></td>
+                    <td><button class="btn-del" onclick="excluirUser('${idU}')">❌</button></td>
+                </tr>`;
+        }).join('');
+    }
+
+    // Função para preencher o formulário quando clicar em "REPOR"
+    function prepararEdicao(nome, cod, custo, venda, qtd) {
+        document.getElementById('p-nome').value = nome;
+        document.getElementById('p-cod').value = cod;
+        document.getElementById('p-custo').value = custo;
+        document.getElementById('p-venda').value = venda;
+        document.getElementById('p-qtd').value = qtd;
+        
+        document.getElementById('titulo-form').innerText = "🔄 Editando Produto";
+        document.getElementById('btn-salvar').innerText = "💾 ATUALIZAR";
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function salvarProduto() {
+        const p = { 
+            nome: document.getElementById('p-nome').value, 
+            codigo_barras: document.getElementById('p-cod').value, 
+            preco_custo: parseFloat(document.getElementById('p-custo').value) || 0,
+            preco: parseFloat(document.getElementById('p-venda').value) || 0, 
+            estoque: parseInt(document.getElementById('p-qtd').value) || 0 
+        };
+        
+        if(!p.nome || !p.codigo_barras) return alert("Preencha o nome e o código!");
+
+        await fetch('/produto', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify(p) 
+        });
+        
+        // Resetar Formulário
+        document.getElementById('titulo-form').innerText = "✨ Adicionar/Repor Produto";
+        document.getElementById('btn-salvar').innerText = "💾 SALVAR";
+        document.querySelectorAll('.card:first-child .grid-form input').forEach(i => i.value = '');
+        carregar();
+    }
+
+    async function salvarUsuario() {
+        const u = { 
+            nome: document.getElementById('u-nome').value, 
+            login: document.getElementById('u-login').value, 
+            senha: document.getElementById('u-senha').value, 
+            cargo: document.getElementById('u-cargo').value 
+        };
+        if(!u.login || !u.senha) return alert("Preencha login e senha!");
+        await fetch('/usuarios', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(u) });
+        document.querySelectorAll('.card:last-child .grid-form input').forEach(i => i.value = '');
+        carregar();
+    }
+
+    async function excluirProd(id) { 
+        if(confirm("Remover este produto?")) { 
+            const res = await fetch(`/produto/${id}`, {method:'DELETE'}); 
+            if(res.ok) carregar();
+            else alert("Erro ao excluir!");
+        } 
+    }
+    
+    async function excluirUser(id) { 
+        if(confirm("Remover este acesso?")) { 
+            const res = await fetch(`/usuarios/${id}`, {method:'DELETE'}); 
+            if(res.ok) carregar();
+            else alert("Erro ao excluir!");
+        } 
+    }
+    
+    carregar();
+</script>
+</body>
+</html>

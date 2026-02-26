@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financeiro - DEV PDV v3.2</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #6366f1; --success: #22c55e; --dark: #0f172a; --bg: #f8fafc; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 15px; color: var(--dark); overflow-x: hidden; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .btn-voltar { text-decoration: none; color: var(--primary); font-weight: bold; border: 1px solid var(--primary); padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; }
+
+        .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .card { background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
+        .card h3 { margin: 0; color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
+        .card p { margin: 8px 0 0; font-size: 1.3rem; font-weight: bold; }
+        .val-lucro { color: var(--success); }
+
+        .chart-container { 
+            background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+            margin-bottom: 25px; height: 300px; position: relative;
+        }
+
+        /* AJUSTE DE RESPONSIVIDADE PARA TABELAS */
+        .secao { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; }
+        .secao h2 { margin-top: 0; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        
+        .tabela-wrapper { 
+            width: 100%; 
+            overflow-x: auto; /* Permite deslizar pro lado no celular */
+            -webkit-overflow-scrolling: touch; 
+        }
+
+        table { width: 100%; min-width: 500px; border-collapse: collapse; }
+        th { text-align: left; padding: 12px; border-bottom: 2px solid #f1f5f9; color: #64748b; font-size: 0.8rem; }
+        td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+
+        .btn-fechar { background: var(--primary); color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+        
+        .badge { 
+            display: inline-block; white-space: nowrap; padding: 4px 8px; 
+            border-radius: 6px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; 
+        }
+        .badge-pix { background: #dcfce7; color: #166534; }
+        .badge-dinheiro { background: #fef9c3; color: #854d0e; }
+        .badge-cartao { background: #dbeafe; color: #1e40af; }
+
+        @media (max-width: 600px) {
+            .header h1 { font-size: 1.5rem; }
+            .card p { font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>📈 Estatísticas</h1>
+    <a href="/" class="btn-voltar">⬅ Sair</a>
+</div>
+
+<div class="grid-cards">
+    <div class="card"><h3>Vendas (Hoje)</h3><p id="totalHoje">R$ 0,00</p></div>
+    <div class="card"><h3>Lucro (Hoje)</h3><p id="lucroHoje" class="val-lucro">R$ 0,00</p></div>
+    <div class="card"><h3>Total Geral</h3><p id="totalGeral">R$ 0,00</p></div>
+    <div class="card"><h3>Lucro Geral</h3><p id="lucroGeral" class="val-lucro">R$ 0,00</p></div>
+</div>
+
+<div class="chart-container">
+    <canvas id="meuGrafico"></canvas>
+</div>
+
+<div class="secao">
+    <h2>📂 Fechamentos Mensais <button class="btn-fechar" onclick="gerarFechamento()">Fechar Mês</button></h2>
+    <div class="tabela-wrapper">
+        <table>
+            <thead><tr><th>Mês/Ano</th><th>Faturamento</th><th>Lucro</th><th>Vendas</th></tr></thead>
+            <tbody id="tabelaFechamentos"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="secao">
+    <h2>🕒 Atividades Recentes</h2>
+    <div class="tabela-wrapper">
+        <table>
+            <thead><tr><th>Data/Hora</th><th>Item</th><th>Total</th><th>Pagamento</th></tr></thead>
+            <tbody id="tabelaVendas"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let chartInstancia = null;
+
+    async function carregarDados() {
+        const res = await fetch('/relatorio-vendas');
+        const data = await res.json();
+
+        document.getElementById('totalHoje').innerText = `R$ ${data.totalHoje.toFixed(2)}`;
+        document.getElementById('lucroHoje').innerText = `R$ ${data.lucroHoje.toFixed(2)}`;
+        document.getElementById('totalGeral').innerText = `R$ ${data.totalGeral.toFixed(2)}`;
+        document.getElementById('lucroGeral').innerText = `R$ ${data.lucroGeral.toFixed(2)}`;
+
+        document.getElementById('tabelaVendas').innerHTML = data.historico.map(v => `
+            <tr>
+                <td>${new Date(v.data_venda).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</td>
+                <td>${v.nome_produto}</td>
+                <td><b>R$ ${v.valor_total.toFixed(2)}</b></td>
+                <td><span class="badge badge-${v.forma_pagamento.toLowerCase()}">${v.forma_pagamento}</span></td>
+            </tr>
+        `).join('');
+
+        document.getElementById('tabelaFechamentos').innerHTML = data.fechamentos.map(f => `
+            <tr>
+                <td><b>${f.mes}</b></td>
+                <td>R$ ${f.total_faturamento.toFixed(2)}</td>
+                <td class="val-lucro">R$ ${f.total_lucro.toFixed(2)}</td>
+                <td>${f.total_vendas_qtd}</td>
+            </tr>
+        `).join('');
+
+        renderizarGrafico(data.historico);
+    }
+
+    function renderizarGrafico(historico) {
+        const ctx = document.getElementById('meuGrafico').getContext('2d');
+        const ultimasVendas = [...historico].reverse().slice(-10);
+        const labels = ultimasVendas.map(v => new Date(v.data_venda).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}));
+        const valores = ultimasVendas.map(v => v.valor_total);
+
+        if (chartInstancia) chartInstancia.destroy();
+
+        chartInstancia = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Vendas (R$)',
+                    data: valores,
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { font: { size: 10 } } },
+                    x: { ticks: { font: { size: 10 } } }
+                }
+            }
+        });
+    }
+
+    async function gerarFechamento() {
+        const mesRef = `${(new Date().getMonth() + 1).toString().padStart(2, '0')}/${new Date().getFullYear()}`;
+        if(!confirm(`Fechar o mês ${mesRef}?`)) return;
+        const res = await fetch('/fechar-mes', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ mes: mesRef })
+        });
+        if(res.ok) { alert("Mês fechado!"); carregarDados(); }
+    }
+
+    carregarDados();
+</script>
+
+</body>
+</html>

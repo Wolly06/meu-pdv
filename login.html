@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - DEV PDV</title>
+    <style>
+        :root { --primary: #6366f1; --dark: #0f172a; --gray: #64748b; }
+        
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); 
+            margin: 0; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+        }
+
+        .login-card { 
+            background: white; 
+            padding: 40px; 
+            border-radius: 20px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+            width: 100%; 
+            max-width: 380px; 
+            text-align: center; 
+        }
+
+        .login-card h1 { color: var(--dark); margin-bottom: 10px; font-size: 1.8rem; }
+        .login-card p { color: var(--gray); margin-bottom: 30px; font-size: 0.9rem; }
+
+        .input-group { text-align: left; margin-bottom: 20px; }
+        .input-group label { display: block; margin-bottom: 8px; color: var(--dark); font-weight: 600; font-size: 0.85rem; }
+        
+        input { 
+            width: 100%; 
+            padding: 12px 15px; 
+            border: 2px solid #e2e8f0; 
+            border-radius: 10px; 
+            box-sizing: border-box; 
+            outline: none; 
+            font-size: 1rem; 
+            transition: 0.3s; 
+        }
+
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
+
+        .btn-login { 
+            width: 100%; 
+            padding: 14px; 
+            background: var(--primary); 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            font-size: 1rem; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: 0.3s; 
+            margin-top: 10px; 
+        }
+
+        .btn-login:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-login:active { transform: scale(0.98); }
+
+        .footer-text { margin-top: 25px; font-size: 0.75rem; color: var(--gray); }
+    </style>
+</head>
+<body>
+
+<div class="login-card">
+    <h1>Bem-vindo 🚀</h1>
+    <p>Acesse o sistema de vendas</p>
+
+    <div class="input-group">
+        <label>Usuário</label>
+        <input type="text" id="usuario" placeholder="Digite seu login" autofocus>
+    </div>
+
+    <div class="input-group">
+        <label>Senha</label>
+        <input type="password" id="senha" placeholder="••••••••">
+    </div>
+
+    <button class="btn-login" onclick="fazerLogin()">ENTRAR NO SISTEMA</button>
+
+    <div class="footer-text">
+        DEV PDV v2.0 - O seu negócio em boas mãos
+    </div>
+</div>
+
+<script>
+    // Função para capturar o "Enter"
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            fazerLogin();
+        }
+    });
+
+    async function fazerLogin() {
+        const user = document.getElementById('usuario').value;
+        const pass = document.getElementById('senha').value;
+        const btn = document.querySelector('.btn-login');
+
+        if (!user || !pass) {
+            alert("Por favor, preencha todos os campos!");
+            return;
+        }
+
+        btn.innerText = "AUTENTICANDO...";
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user, pass })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                window.location.href = '/'; // Vai para o Caixa
+            } else {
+                alert(data.erro || "Usuário ou senha incorretos!");
+                btn.innerText = "ENTRAR NO SISTEMA";
+                btn.disabled = false;
+            }
+        } catch (error) {
+            alert("Erro ao conectar com o servidor!");
+            btn.innerText = "ENTRAR NO SISTEMA";
+            btn.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>
