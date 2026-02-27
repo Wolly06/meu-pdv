@@ -137,20 +137,17 @@
     const inputPrincipal = document.getElementById('input-principal');
     const divSugestoes = document.getElementById('sugestoes');
 
-    // Carregar produtos para busca e autocompletar
     async function carregarProdutos() {
         const res = await fetch('/lista-estoque');
         produtosNoBanco = await res.json();
     }
 
-    // Atalhos de Teclado (Consertado o erro do 'C' e 'F')
     document.addEventListener('keydown', (e) => {
         if (document.getElementById('modal-pagamento').style.display === 'flex') {
             if (e.key === 'Escape') fecharModal();
             return;
         }
 
-        // Se estiver digitando no campo, não aciona o Cancelar (C) nem o Pagar (F)
         if (document.activeElement === inputPrincipal) {
             if (e.key === 'Enter') { 
                 processarInput(inputPrincipal.value); 
@@ -165,7 +162,6 @@
         if (e.key.toLowerCase() === 'b') { e.preventDefault(); vendaManual(); }
     });
 
-    // Lógica de Autocompletar
     inputPrincipal.addEventListener('input', () => {
         const termo = inputPrincipal.value.toLowerCase();
         divSugestoes.innerHTML = '';
@@ -210,7 +206,6 @@
     }
 
     function adicionarAoCarrinho(nome, preco, qtd, cod, estoqueDisponivel) {
-        // Trava de estoque (ignora se for venda manual [B])
         if (!nome.startsWith('[B]')) {
             const jaNoCarrinho = carrinho.filter(i => i.cod === cod).reduce((sum, i) => sum + i.qtd, 0);
             if ((jaNoCarrinho + qtd) > estoqueDisponivel) {
@@ -275,9 +270,30 @@
             body: JSON.stringify({ carrinho, formaPagamento: formaSelecionada })
         });
         if (res.ok) {
-            alert("VENDA FINALIZADA!");
+            // --- INÍCIO DA LÓGICA DE WHATSAPP MELHORADA ---
+            let textoZap = `*COMPROVANTE DE VENDA*\n`;
+            textoZap += `*Data:* ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
+            textoZap += `----------------------------\n`;
+            
+            carrinho.forEach(item => {
+                textoZap += `▪️ ${item.nome}\n   ${item.qtd}x R$ ${item.preco.toFixed(2)} = *R$ ${item.subtotal.toFixed(2)}*\n`;
+            });
+            
+            textoZap += `----------------------------\n`;
+            textoZap += `*TOTAL DA VENDA: R$ ${totalVenda.toFixed(2)}*\n`;
+            textoZap += `*Forma de Pagamento:* ${formaSelecionada}\n\n`;
+            textoZap += `_Obrigado pela preferência!_`;
+
+            alert("VENDA FINALIZADA COM SUCESSO!");
+
+            if(confirm("Deseja enviar o comprovante pelo WhatsApp?")) {
+                const urlZap = `https://wa.me/?text=${encodeURIComponent(textoZap)}`;
+                window.open(urlZap, '_blank');
+            }
+            // --- FIM DA LÓGICA DE WHATSAPP ---
+
             carrinho = []; atualizarInterface(); fecharModal();
-            carregarProdutos(); // Atualiza a lista interna de estoque
+            carregarProdutos();
         }
     }
 
