@@ -18,18 +18,25 @@
         .card p { margin: 8px 0 0; font-size: 1.3rem; font-weight: bold; }
         .val-lucro { color: var(--success); }
 
+        /* NOVO ESTILO DO FILTRO */
+        .filtro-data { 
+            background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+            margin-bottom: 25px; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+        }
+        .filtro-data input { padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; font-family: inherit; }
+        .btn-busca { background: var(--primary); color: white; border: none; padding: 9px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
+
         .chart-container { 
             background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
             margin-bottom: 25px; height: 300px; position: relative;
         }
 
-        /* AJUSTE DE RESPONSIVIDADE PARA TABELAS */
         .secao { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; }
         .secao h2 { margin-top: 0; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         
         .tabela-wrapper { 
             width: 100%; 
-            overflow-x: auto; /* Permite deslizar pro lado no celular */
+            overflow-x: auto; 
             -webkit-overflow-scrolling: touch; 
         }
 
@@ -50,6 +57,7 @@
         @media (max-width: 600px) {
             .header h1 { font-size: 1.5rem; }
             .card p { font-size: 1.1rem; }
+            .filtro-data { flex-direction: column; align-items: stretch; }
         }
     </style>
 </head>
@@ -67,6 +75,15 @@
     <div class="card"><h3>Lucro Geral</h3><p id="lucroGeral" class="val-lucro">R$ 0,00</p></div>
 </div>
 
+<div class="filtro-data">
+    <span>📅 <strong>Filtrar Período:</strong></span>
+    <input type="date" id="dataInicio">
+    <span>até</span>
+    <input type="date" id="dataFim">
+    <button class="btn-busca" onclick="filtrarPorData()">🔍 BUSCAR</button>
+    <button class="btn-voltar" style="font-size: 0.7rem;" onclick="carregarDados()">VER TUDO</button>
+</div>
+
 <div class="chart-container">
     <canvas id="meuGrafico"></canvas>
 </div>
@@ -82,7 +99,7 @@
 </div>
 
 <div class="secao">
-    <h2>🕒 Atividades Recentes</h2>
+    <h2 id="titulo-atividades">🕒 Atividades Recentes</h2>
     <div class="tabela-wrapper">
         <table>
             <thead><tr><th>Data/Hora</th><th>Item</th><th>Total</th><th>Pagamento</th></tr></thead>
@@ -93,24 +110,20 @@
 
 <script>
     let chartInstancia = null;
+    let historicoCompleto = []; // Para filtrar sem precisar carregar do banco de novo
 
     async function carregarDados() {
         const res = await fetch('/relatorio-vendas');
         const data = await res.json();
+        historicoCompleto = data.historico;
 
         document.getElementById('totalHoje').innerText = `R$ ${data.totalHoje.toFixed(2)}`;
         document.getElementById('lucroHoje').innerText = `R$ ${data.lucroHoje.toFixed(2)}`;
         document.getElementById('totalGeral').innerText = `R$ ${data.totalGeral.toFixed(2)}`;
         document.getElementById('lucroGeral').innerText = `R$ ${data.lucroGeral.toFixed(2)}`;
 
-        document.getElementById('tabelaVendas').innerHTML = data.historico.map(v => `
-            <tr>
-                <td>${new Date(v.data_venda).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</td>
-                <td>${v.nome_produto}</td>
-                <td><b>R$ ${v.valor_total.toFixed(2)}</b></td>
-                <td><span class="badge badge-${v.forma_pagamento.toLowerCase()}">${v.forma_pagamento}</span></td>
-            </tr>
-        `).join('');
+        renderizarTabela(historicoCompleto);
+        document.getElementById('titulo-atividades').innerText = "🕒 Atividades Recentes";
 
         document.getElementById('tabelaFechamentos').innerHTML = data.fechamentos.map(f => `
             <tr>
@@ -121,7 +134,38 @@
             </tr>
         `).join('');
 
-        renderizarGrafico(data.historico);
+        renderizarGrafico(historicoCompleto);
+    }
+
+    // Função para renderizar apenas a tabela de vendas
+    function renderizarTabela(lista) {
+        document.getElementById('tabelaVendas').innerHTML = lista.map(v => `
+            <tr>
+                <td>${new Date(v.data_venda).toLocaleDateString('pt-BR')} ${new Date(v.data_venda).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</td>
+                <td>${v.nome_produto}</td>
+                <td><b>R$ ${v.valor_total.toFixed(2)}</b></td>
+                <td><span class="badge badge-${v.forma_pagamento.toLowerCase()}">${v.forma_pagamento}</span></td>
+            </tr>
+        `).join('');
+    }
+
+    // NOVA FUNÇÃO DE FILTRO
+    function filtrarPorData() {
+        const inicio = document.getElementById('dataInicio').value;
+        const fim = document.getElementById('dataFim').value;
+
+        if (!inicio || !fim) {
+            alert("Escolha a data de início e fim!");
+            return;
+        }
+
+        const filtradas = historicoCompleto.filter(v => {
+            const dataVenda = v.data_venda.split('T')[0]; // Pega YYYY-MM-DD
+            return dataVenda >= inicio && dataVenda <= fim;
+        });
+
+        renderizarTabela(filtradas);
+        document.getElementById('titulo-atividades').innerText = `🔎 Resultados de ${inicio.split('-').reverse().join('/')} até ${fim.split('-').reverse().join('/')}`;
     }
 
     function renderizarGrafico(historico) {
