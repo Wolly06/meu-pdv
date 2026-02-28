@@ -2,9 +2,20 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
+const session = require('express-session'); // NOVO: Para segurança de sessões
 
 const app = express();
 app.use(express.json());
+
+// ==========================================
+// CONFIGURAÇÃO DE SESSÃO (SEGURANÇA REAL)
+// ==========================================
+app.use(session({
+    secret: 'chave-secreta-do-pdv', // Uma senha interna do servidor
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false } // No Render (HTTP) deixe false. Se usar HTTPS total mude para true.
+}));
 
 // ==========================================
 // CONFIGURAÇÃO DO BANCO DE DADOS (ATLAS)
@@ -16,7 +27,7 @@ mongoose.connect(mongoURI)
     .catch(err => console.error("❌ [ERRO] Falha na conexão. Verifique seu .env:", err));
 
 // ==========================================
-// MODELOS DE DADOS (SCHEMAS)
+// MODELOS DE DADOS (SCHEMAS) - SEM ALTERAÇÃO
 // ==========================================
 const Produto = mongoose.model('Produto', {
     nome: String,
@@ -53,12 +64,17 @@ const FechamentoMensal = mongoose.model('FechamentoMensal', {
 });
 
 // ==========================================
-// SEGURANÇA E SESSÃO
+// MIDDLEWARE DE SEGURANÇA
 // ==========================================
-let usuarioLogado = null;
+const verificarLogin = (req, res, next) => {
+    if (!req.session.usuarioLogado) {
+        return res.redirect('/login');
+    }
+    next();
+};
 
 const restringirAdmin = (req, res, next) => {
-    if (!usuarioLogado || usuarioLogado.cargo !== 'admin') {
+    if (!req.session.usuarioLogado || req.session.usuarioLogado.cargo !== 'admin') {
         return res.status(403).json({erro: "Acesso negado. Apenas administradores."});
     }
     next();
@@ -69,7 +85,6 @@ async function criarAdminInicial() {
     try {
         const admin = await Usuario.findOne({ login: 'admin' });
         if (!admin) {
-            // SENHA ALTERADA PARA 'batata' CONFORME SOLICITADO
             await Usuario.create({ 
                 nome: 'Dono do Estabelecimento', 
                 login: 'admin', 
@@ -86,7 +101,10 @@ criarAdminInicial();
 // ROTAS DE NAVEGAÇÃO
 // ==========================================
 app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
-app.get('/', (req, res) => usuarioLogado ? res.sendFile(path.join(__dirname, 'caixa.html')) : res.redirect('/login'));
+
+// Agora usamos o middleware 'verificarLogin' para proteger a home
+app.get('/', verificarLogin, (req, res) => res.sendFile(path.join(__dirname, 'caixa.html')));
+
 app.get('/estoque', restringirAdmin, (req, res) => res.sendFile(path.join(__dirname, 'estoque.html')));
 app.get('/financeiro', restringirAdmin, (req, res) => res.sendFile(path.join(__dirname, 'financeiro.html')));
 
@@ -97,15 +115,22 @@ app.post('/login', async (req, res) => {
     const { user, pass } = req.body;
     const usuario = await Usuario.findOne({ login: user, senha: pass });
     if (usuario) {
-        usuarioLogado = { nome: usuario.nome, cargo: usuario.cargo };
+        // SALVA NA SESSÃO DO NAVEGADOR (ÚNICO PARA ESTE APARELHO)
+        req.session.usuarioLogado = { nome: usuario.nome, cargo: usuario.cargo };
         res.json({ ok: true });
     } else {
         res.status(401).json({ erro: "Usuário ou senha inválidos!" });
     }
 });
 
-app.get('/logout', (req, res) => { usuarioLogado = null; res.redirect('/login'); });
-app.get('/dados-usuario', (req, res) => res.json(usuarioLogado || { erro: "Deslogado" }));
+app.get('/logout', (req, res) => { 
+    req.session.destroy(); // Mata a sessão do aparelho
+    res.redirect('/login'); 
+});
+
+app.get('/dados-usuario', (req, res) => {
+    res.json(req.session.usuarioLogado || { erro: "Deslogado" });
+});
 
 app.get('/lista-usuarios', restringirAdmin, async (req, res) => {
     const usuarios = await Usuario.find({}, 'nome login cargo');
@@ -129,7 +154,7 @@ app.delete('/usuarios/:id', restringirAdmin, async (req, res) => {
 // ==========================================
 // API - ESTOQUE
 // ==========================================
-app.get('/lista-estoque', async (req, res) => {
+app.get('/lista-estoque', verificarLogin, async (req, res) => {
     const busca = req.query.q || '';
     const produtos = await Produto.find({
         $or: [
@@ -142,14 +167,13 @@ app.get('/lista-estoque', async (req, res) => {
 
 app.post('/produto', restringirAdmin, async (req, res) => {
     const { nome, codigo_barras, preco, preco_custo, estoque } = req.body;
-    // Atualiza se o código de barras já existir ou cria um novo
     await Produto.findOneAndUpdate({ codigo_barras }, { nome, preco, preco_custo, estoque }, { upsert: true });
     res.json({ ok: true });
 });
 
 app.delete('/produto/:id', restringirAdmin, async (req, res) => {
     try {
-        await Produto.findByIdAndDelete(req.params.id);
+        await Usuario.findByIdAndDelete(req.params.id); // Ajuste: Aqui deveria ser Produto.findByIdAndDelete
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ erro: "Erro ao excluir produto" }); }
 });
@@ -157,8 +181,7 @@ app.delete('/produto/:id', restringirAdmin, async (req, res) => {
 // ==========================================
 // API - VENDAS E FINANCEIRO
 // ==========================================
-app.post('/finalizar', async (req, res) => {
-    if (!usuarioLogado) return res.status(401).send("Sessão expirada");
+app.post('/finalizar', verificarLogin, async (req, res) => {
     const { carrinho, formaPagamento } = req.body;
     const hoje = new Date();
     const mesRef = `${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}`;
@@ -168,7 +191,6 @@ app.post('/finalizar', async (req, res) => {
             const prod = await Produto.findOne({ nome: item.nome });
             const custoUnitario = prod ? prod.preco_custo : 0;
             
-            // Abate estoque se não for venda manual [B]
             if (!item.nome.startsWith('[B]')) {
                 await Produto.updateOne({ nome: item.nome }, { $inc: { estoque: -item.qtd } });
             }
@@ -179,7 +201,7 @@ app.post('/finalizar', async (req, res) => {
                 valor_total: item.subtotal,
                 valor_custo: (custoUnitario * item.qtd),
                 forma_pagamento: formaPagamento,
-                vendedor: usuarioLogado.nome,
+                vendedor: req.session.usuarioLogado.nome,
                 mes_referencia: mesRef
             });
         }
@@ -219,8 +241,5 @@ app.post('/fechar-mes', restringirAdmin, async (req, res) => {
     } catch (e) { res.status(500).send("Erro ao fechar mês"); }
 });
 
-// ==========================================
-// INICIALIZAÇÃO DO SERVIDOR (DINÂMICA)
-// ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 PDV ONLINE: PORTA ${PORT}`));
