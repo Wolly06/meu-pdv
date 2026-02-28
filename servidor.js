@@ -2,38 +2,37 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
-const session = require('express-session'); // NOVO: Para segurança de sessões
+const session = require('express-session');
 
 const app = express();
 app.use(express.json());
 
 // ==========================================
-// CONFIGURAÇÃO DE SESSÃO (SEGURANÇA REAL)
+// CONFIGURAÇÃO DE SESSÃO (SEGURANÇA)
 // ==========================================
 app.use(session({
-    secret: 'chave-secreta-do-pdv', // Uma senha interna do servidor
+    secret: 'chave-secreta-do-pdv',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false } // No Render (HTTP) deixe false. Se usar HTTPS total mude para true.
+    cookie: { secure: false } 
 }));
 
 // ==========================================
-// CONFIGURAÇÃO DO BANCO DE DADOS (ATLAS)
+// CONEXÃO MONGODB ATLAS
 // ==========================================
 const mongoURI = process.env.MONGODB_URI; 
-
 mongoose.connect(mongoURI)
-    .then(() => console.log("✅ [NUVEM] Conexão com MongoDB Atlas estabelecida!"))
-    .catch(err => console.error("❌ [ERRO] Falha na conexão. Verifique seu .env:", err));
+    .then(() => console.log("✅ Conectado ao MongoDB Atlas!"))
+    .catch(err => console.error("❌ Erro ao conectar:", err));
 
 // ==========================================
-// MODELOS DE DADOS (SCHEMAS) - SEM ALTERAÇÃO
+// MODELOS (SCHEMAS)
 // ==========================================
 const Produto = mongoose.model('Produto', {
     nome: String,
     codigo_barras: { type: String, unique: true },
     preco: Number,
-    preco_custo: { type: Number, default: 0 },
+    preco_custo: Number,
     estoque: Number
 });
 
@@ -64,104 +63,77 @@ const FechamentoMensal = mongoose.model('FechamentoMensal', {
 });
 
 // ==========================================
-// MIDDLEWARE DE SEGURANÇA
+// MIDDLEWARES
 // ==========================================
 const verificarLogin = (req, res, next) => {
-    if (!req.session.usuarioLogado) {
-        return res.redirect('/login');
-    }
+    if (!req.session.usuarioLogado) return res.redirect('/login');
     next();
 };
 
 const restringirAdmin = (req, res, next) => {
     if (!req.session.usuarioLogado || req.session.usuarioLogado.cargo !== 'admin') {
-        return res.status(403).json({erro: "Acesso negado. Apenas administradores."});
+        return res.status(403).json({erro: "Acesso negado"});
     }
     next();
 };
 
-// FUNÇÃO DE SEGURANÇA: Cria o admin se ele não existir
-async function criarAdminInicial() {
-    try {
-        const admin = await Usuario.findOne({ login: 'admin' });
-        if (!admin) {
-            await Usuario.create({ 
-                nome: 'Dono do Estabelecimento', 
-                login: 'admin', 
-                senha: 'batata', 
-                cargo: 'admin' 
-            });
-            console.log("👤 [SISTEMA] Usuário admin padrão criado com senha: 'batata'");
-        }
-    } catch (e) { console.log("Erro ao verificar admin inicial"); }
-}
-criarAdminInicial();
-
 // ==========================================
-// ROTAS DE NAVEGAÇÃO
+// ROTAS DE LOGIN E USUÁRIOS (O QUE FALTAVA)
 // ==========================================
 app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
 
-// Agora usamos o middleware 'verificarLogin' para proteger a home
-app.get('/', verificarLogin, (req, res) => res.sendFile(path.join(__dirname, 'caixa.html')));
-
-app.get('/estoque', restringirAdmin, (req, res) => res.sendFile(path.join(__dirname, 'estoque.html')));
-app.get('/financeiro', restringirAdmin, (req, res) => res.sendFile(path.join(__dirname, 'financeiro.html')));
-
-// ==========================================
-// API - AUTENTICAÇÃO E USUÁRIOS
-// ==========================================
 app.post('/login', async (req, res) => {
     const { user, pass } = req.body;
     const usuario = await Usuario.findOne({ login: user, senha: pass });
     if (usuario) {
-        // SALVA NA SESSÃO DO NAVEGADOR (ÚNICO PARA ESTE APARELHO)
         req.session.usuarioLogado = { nome: usuario.nome, cargo: usuario.cargo };
         res.json({ ok: true });
     } else {
-        res.status(401).json({ erro: "Usuário ou senha inválidos!" });
+        res.status(401).json({ erro: "Dados inválidos" });
     }
 });
 
 app.get('/logout', (req, res) => { 
-    req.session.destroy(); // Mata a sessão do aparelho
+    req.session.destroy();
     res.redirect('/login'); 
 });
 
-app.get('/dados-usuario', (req, res) => {
-    res.json(req.session.usuarioLogado || { erro: "Deslogado" });
-});
+app.get('/dados-usuario', (req, res) => res.json(req.session.usuarioLogado || { erro: "Deslogado" }));
 
+// BUSCAR LISTA DE USUÁRIOS (Para aparecer Walisson, Beatriz, etc)
 app.get('/lista-usuarios', restringirAdmin, async (req, res) => {
-    const usuarios = await Usuario.find({}, 'nome login cargo');
-    res.json(usuarios);
+    try {
+        const usuarios = await Usuario.find({});
+        res.json(usuarios);
+    } catch (e) { res.status(500).json([]); }
 });
 
+// CADASTRAR NOVO USUÁRIO
 app.post('/usuarios', restringirAdmin, async (req, res) => {
     try {
         await Usuario.create(req.body);
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ erro: "Este login já existe!" }); }
+    } catch (e) { res.status(500).json({ erro: "Erro ao criar" }); }
 });
 
+// DELETAR USUÁRIO (Botão ❌)
 app.delete('/usuarios/:id', restringirAdmin, async (req, res) => {
     try {
         await Usuario.findByIdAndDelete(req.params.id);
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ erro: "Erro ao excluir usuário" }); }
+    } catch (e) { res.status(500).json({ erro: "Erro ao excluir" }); }
 });
 
 // ==========================================
-// API - ESTOQUE
+// ROTAS DE PRODUTOS
 // ==========================================
+app.get('/', verificarLogin, (req, res) => res.sendFile(path.join(__dirname, 'caixa.html')));
+app.get('/estoque', restringirAdmin, (req, res) => res.sendFile(path.join(__dirname, 'estoque.html')));
+app.get('/financeiro', restringirAdmin, (req, res) => res.sendFile(path.join(__dirname, 'financeiro.html')));
+
 app.get('/lista-estoque', verificarLogin, async (req, res) => {
     const busca = req.query.q || '';
-    const produtos = await Produto.find({
-        $or: [
-            { nome: new RegExp(busca, 'i') }, 
-            { codigo_barras: new RegExp(busca, 'i') }
-        ]
-    });
+    const produtos = await Produto.find({ nome: new RegExp(busca, 'i') });
     res.json(produtos);
 });
 
@@ -172,14 +144,12 @@ app.post('/produto', restringirAdmin, async (req, res) => {
 });
 
 app.delete('/produto/:id', restringirAdmin, async (req, res) => {
-    try {
-        await Usuario.findByIdAndDelete(req.params.id); // Ajuste: Aqui deveria ser Produto.findByIdAndDelete
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ erro: "Erro ao excluir produto" }); }
+    await Produto.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
 });
 
 // ==========================================
-// API - VENDAS E FINANCEIRO
+// ROTAS DE VENDAS E FINANCEIRO
 // ==========================================
 app.post('/finalizar', verificarLogin, async (req, res) => {
     const { carrinho, formaPagamento } = req.body;
@@ -206,40 +176,45 @@ app.post('/finalizar', verificarLogin, async (req, res) => {
             });
         }
         res.json({ ok: true });
-    } catch (e) { res.status(500).send("Erro ao processar venda"); }
+    } catch (e) { res.status(500).send("Erro"); }
 });
 
 app.get('/relatorio-vendas', restringirAdmin, async (req, res) => {
-    try {
-        const hoje = new Date(); hoje.setHours(0,0,0,0);
-        const todasVendas = await Venda.find().sort({ data_venda: -1 });
-        const vendasHoje = todasVendas.filter(v => v.data_venda >= hoje);
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const todasVendas = await Venda.find().sort({ data_venda: -1 });
+    const vendasHoje = todasVendas.filter(v => v.data_venda >= hoje);
 
-        const totalHoje = vendasHoje.reduce((acc, v) => acc + v.valor_total, 0);
-        const lucroHoje = totalHoje - vendasHoje.reduce((acc, v) => acc + v.valor_custo, 0);
-        const totalGeral = todasVendas.reduce((acc, v) => acc + v.valor_total, 0);
-        const lucroGeral = totalGeral - todasVendas.reduce((acc, v) => acc + v.valor_custo, 0);
-        const fechamentos = await FechamentoMensal.find().sort({ data_geracao: -1 });
+    const totalHoje = vendasHoje.reduce((acc, v) => acc + v.valor_total, 0);
+    const lucroHoje = totalHoje - vendasHoje.reduce((acc, v) => acc + v.valor_custo, 0);
+    const totalGeral = todasVendas.reduce((acc, v) => acc + v.valor_total, 0);
+    const lucroGeral = totalGeral - todasVendas.reduce((acc, v) => acc + v.valor_custo, 0);
+    const fechamentos = await FechamentoMensal.find().sort({ data_geracao: -1 });
 
-        res.json({ totalHoje, lucroHoje, totalGeral, lucroGeral, historico: todasVendas.slice(0, 50), fechamentos });
-    } catch (e) { res.status(500).send("Erro ao gerar relatório"); }
+    res.json({ totalHoje, lucroHoje, totalGeral, lucroGeral, historico: todasVendas.slice(0, 50), fechamentos });
+});
+
+app.get('/ranking-produtos', restringirAdmin, async (req, res) => {
+    const ranking = await Venda.aggregate([
+        { $group: { _id: "$nome_produto", totalVendido: { $sum: "$quantidade" } } },
+        { $sort: { totalVendido: -1 } },
+        { $limit: 10 }
+    ]);
+    res.json(ranking);
 });
 
 app.post('/fechar-mes', restringirAdmin, async (req, res) => {
-    try {
-        const { mes } = req.body;
-        const vendasMes = await Venda.find({ mes_referencia: mes });
-        const faturamento = vendasMes.reduce((acc, v) => acc + v.valor_total, 0);
-        const lucro = faturamento - vendasMes.reduce((acc, v) => acc + v.valor_custo, 0);
+    const { mes } = req.body;
+    const vendasMes = await Venda.find({ mes_referencia: mes });
+    const faturamento = vendasMes.reduce((acc, v) => acc + v.valor_total, 0);
+    const lucro = faturamento - vendasMes.reduce((acc, v) => acc + v.valor_custo, 0);
 
-        await FechamentoMensal.findOneAndUpdate({ mes }, { 
-            total_faturamento: faturamento, 
-            total_lucro: lucro, 
-            total_vendas_qtd: vendasMes.length 
-        }, { upsert: true });
-        res.json({ ok: true });
-    } catch (e) { res.status(500).send("Erro ao fechar mês"); }
+    await FechamentoMensal.findOneAndUpdate({ mes }, { 
+        total_faturamento: faturamento, 
+        total_lucro: lucro, 
+        total_vendas_qtd: vendasMes.length 
+    }, { upsert: true });
+    res.json({ ok: true });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 PDV ONLINE: PORTA ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
