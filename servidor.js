@@ -1,220 +1,213 @@
-require('dotenv').config(); 
-const express = require('express');
-const mongoose = require('mongoose');
-const path = require('path');
-const session = require('express-session');
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financeiro - DEV PDV</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --primary: #6366f1; --success: #10b981; --danger: #ef4444; --dark: #0f172a; --gray: #64748b; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f1f5f9; margin: 0; padding: 20px; }
+        nav { background: var(--dark); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; border-radius: 12px; margin-bottom: 20px; }
+        .nav-btn { text-decoration: none; color: white; background: var(--primary); padding: 8px 15px; border-radius: 6px; font-weight: bold; }
+        
+        .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .card-stat { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
+        .card-stat h3 { margin: 0; color: var(--gray); font-size: 0.9rem; }
+        .card-stat p { margin: 10px 0 0; font-size: 1.8rem; font-weight: bold; color: var(--dark); }
+        .lucro { color: var(--success) !important; }
 
-const app = express();
-app.use(express.json());
+        .container-flex { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .painel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { text-align: left; color: var(--gray); padding: 10px; border-bottom: 2px solid #f1f5f9; }
+        td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
 
-// ==========================================
-// CONFIGURAÇÃO DE SESSÃO (SEGURANÇA)
-// ==========================================
-app.use(session({
-    secret: 'chave-secreta-do-pdv',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false } 
-}));
+        .btn-fechar { background: var(--success); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
+        
+        /* Cores das Formas de Pagamento */
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; color: white; text-transform: uppercase; }
+        .bg-pix { background: #32bcad; }
+        .bg-dinheiro { background: #10b981; }
+        .bg-cartao { background: #6366f1; }
+        .bg-padrao { background: var(--gray); }
 
-// ==========================================
-// CONEXÃO MONGODB ATLAS
-// ==========================================
-const mongoURI = process.env.MONGODB_URI; 
-mongoose.connect(mongoURI)
-    .then(() => console.log("✅ Conectado ao MongoDB Atlas!"))
-    .catch(err => console.error("❌ Erro ao conectar:", err));
-
-// ==========================================
-// MODELOS (SCHEMAS)
-// ==========================================
-const Produto = mongoose.model('Produto', {
-    nome: String,
-    codigo_barras: { type: String, unique: true },
-    preco: Number,
-    preco_custo: Number,
-    estoque: Number
-});
-
-const Usuario = mongoose.model('Usuario', {
-    nome: String,
-    login: { type: String, unique: true },
-    senha: { type: String },
-    cargo: String
-});
-
-const Venda = mongoose.model('Venda', {
-    nome_produto: String,
-    quantidade: Number,
-    valor_total: Number,
-    valor_custo: Number,
-    forma_pagamento: String,
-    data_venda: { type: Date, default: Date.now },
-    vendedor: String,
-    mes_referencia: String 
-});
-
-const FechamentoMensal = mongoose.model('FechamentoMensal', {
-    mes: String,
-    total_faturamento: Number,
-    total_lucro: Number,
-    total_vendas_qtd: Number,
-    data_geracao: { type: Date, default: Date.now }
-});
-
-// ==========================================
-// MIDDLEWARES
-// ==========================================
-const verificarLogin = (req, res, next) => {
-    if (!req.session.usuarioLogado) return res.redirect('/login');
-    next();
-};
-
-const restringirAdmin = (req, res, next) => {
-    if (!req.session.usuarioLogado || req.session.usuarioLogado.cargo !== 'admin') {
-        return res.status(403).json({erro: "Acesso negado"});
-    }
-    next();
-};
-
-// ==========================================
-// ROTAS DE LOGIN E USUÁRIOS (O QUE FALTAVA)
-// ==========================================
-app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
-
-app.post('/login', async (req, res) => {
-    const { user, pass } = req.body;
-    const usuario = await Usuario.findOne({ login: user, senha: pass });
-    if (usuario) {
-        req.session.usuarioLogado = { nome: usuario.nome, cargo: usuario.cargo };
-        res.json({ ok: true });
-    } else {
-        res.status(401).json({ erro: "Dados inválidos" });
-    }
-});
-
-app.get('/logout', (req, res) => { 
-    req.session.destroy();
-    res.redirect('/login'); 
-});
-
-app.get('/dados-usuario', (req, res) => res.json(req.session.usuarioLogado || { erro: "Deslogado" }));
-
-// BUSCAR LISTA DE USUÁRIOS (Para aparecer Walisson, Beatriz, etc)
-app.get('/lista-usuarios', restringirAdmin, async (req, res) => {
-    try {
-        const usuarios = await Usuario.find({});
-        res.json(usuarios);
-    } catch (e) { res.status(500).json([]); }
-});
-
-// CADASTRAR NOVO USUÁRIO
-app.post('/usuarios', restringirAdmin, async (req, res) => {
-    try {
-        await Usuario.create(req.body);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ erro: "Erro ao criar" }); }
-});
-
-// DELETAR USUÁRIO (Botão ❌)
-app.delete('/usuarios/:id', restringirAdmin, async (req, res) => {
-    try {
-        await Usuario.findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ erro: "Erro ao excluir" }); }
-});
-
-// ==========================================
-// ROTAS DE PRODUTOS
-// ==========================================
-app.get('/', verificarLogin, (req, res) => res.sendFile(path.join(__dirname, 'caixa.html')));
-app.get('/estoque', restringirAdmin, (req, res) => res.sendFile(path.join(__dirname, 'estoque.html')));
-app.get('/financeiro', restringirAdmin, (req, res) => res.sendFile(path.join(__dirname, 'financeiro.html')));
-
-app.get('/lista-estoque', verificarLogin, async (req, res) => {
-    const busca = req.query.q || '';
-    const produtos = await Produto.find({ nome: new RegExp(busca, 'i') });
-    res.json(produtos);
-});
-
-app.post('/produto', restringirAdmin, async (req, res) => {
-    const { nome, codigo_barras, preco, preco_custo, estoque } = req.body;
-    await Produto.findOneAndUpdate({ codigo_barras }, { nome, preco, preco_custo, estoque }, { upsert: true });
-    res.json({ ok: true });
-});
-
-app.delete('/produto/:id', restringirAdmin, async (req, res) => {
-    await Produto.findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
-});
-
-// ==========================================
-// ROTAS DE VENDAS E FINANCEIRO
-// ==========================================
-app.post('/finalizar', verificarLogin, async (req, res) => {
-    const { carrinho, formaPagamento } = req.body;
-    const hoje = new Date();
-    const mesRef = `${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}`;
-
-    try {
-        for (const item of carrinho) {
-            const prod = await Produto.findOne({ nome: item.nome });
-            const custoUnitario = prod ? prod.preco_custo : 0;
-            
-            if (!item.nome.startsWith('[B]')) {
-                await Produto.updateOne({ nome: item.nome }, { $inc: { estoque: -item.qtd } });
-            }
-            
-            await Venda.create({
-                nome_produto: item.nome,
-                quantidade: item.qtd,
-                valor_total: item.subtotal,
-                valor_custo: (custoUnitario * item.qtd),
-                forma_pagamento: formaPagamento,
-                vendedor: req.session.usuarioLogado.nome,
-                mes_referencia: mesRef
-            });
+        @media (max-width: 850px) {
+            .container-flex { grid-template-columns: 1fr; }
         }
-        res.json({ ok: true });
-    } catch (e) { res.status(500).send("Erro"); }
-});
+    </style>
+</head>
+<body>
 
-app.get('/relatorio-vendas', restringirAdmin, async (req, res) => {
-    const hoje = new Date(); hoje.setHours(0,0,0,0);
-    const todasVendas = await Venda.find().sort({ data_venda: -1 });
-    const vendasHoje = todasVendas.filter(v => v.data_venda >= hoje);
+<nav>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <h2>💰 Painel Financeiro</h2>
+        <a href="/" class="nav-btn" style="background: var(--gray);">⬅ VOLTAR AO CAIXA</a>
+    </div>
+    <div id="user-info">👤 Carregando...</div>
+</nav>
 
-    const totalHoje = vendasHoje.reduce((acc, v) => acc + v.valor_total, 0);
-    const lucroHoje = totalHoje - vendasHoje.reduce((acc, v) => acc + v.valor_custo, 0);
-    const totalGeral = todasVendas.reduce((acc, v) => acc + v.valor_total, 0);
-    const lucroGeral = totalGeral - todasVendas.reduce((acc, v) => acc + v.valor_custo, 0);
-    const fechamentos = await FechamentoMensal.find().sort({ data_geracao: -1 });
+<div class="grid-stats">
+    <div class="card-stat">
+        <h3>VENDAS HOJE</h3>
+        <p id="total-hoje">R$ 0,00</p>
+    </div>
+    <div class="card-stat">
+        <h3>LUCRO HOJE</h3>
+        <p id="lucro-hoje" class="lucro">R$ 0,00</p>
+    </div>
+    <div class="card-stat">
+        <h3>FATURAMENTO GERAL</h3>
+        <p id="total-geral">R$ 0,00</p>
+    </div>
+    <div class="card-stat">
+        <h3>LUCRO GERAL</h3>
+        <p id="lucro-geral" class="lucro">R$ 0,00</p>
+    </div>
+</div>
 
-    res.json({ totalHoje, lucroHoje, totalGeral, lucroGeral, historico: todasVendas.slice(0, 50), fechamentos });
-});
+<div class="container-flex">
+    <div class="painel">
+        <h3>📊 PRODUTOS MAIS VENDIDOS (TOP 10)</h3>
+        <div style="position: relative; height:300px; width:100%">
+            <canvas id="graficoProdutos"></canvas>
+        </div>
+    </div>
 
-app.get('/ranking-produtos', restringirAdmin, async (req, res) => {
-    const ranking = await Venda.aggregate([
-        { $group: { _id: "$nome_produto", totalVendido: { $sum: "$quantidade" } } },
-        { $sort: { totalVendido: -1 } },
-        { $limit: 10 }
-    ]);
-    res.json(ranking);
-});
+    <div class="painel">
+        <h3>📅 FECHAMENTO MENSAL</h3>
+        <button class="btn-fechar" onclick="fecharMes()">GERAR FECHAMENTO DESTE MÊS</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>Mês/Ano</th>
+                    <th>Faturamento</th>
+                    <th>Lucro</th>
+                </tr>
+            </thead>
+            <tbody id="lista-fechamentos"></tbody>
+        </table>
+    </div>
+</div>
 
-app.post('/fechar-mes', restringirAdmin, async (req, res) => {
-    const { mes } = req.body;
-    const vendasMes = await Venda.find({ mes_referencia: mes });
-    const faturamento = vendasMes.reduce((acc, v) => acc + v.valor_total, 0);
-    const lucro = faturamento - vendasMes.reduce((acc, v) => acc + v.valor_custo, 0);
+<div class="painel" style="margin-top: 20px;">
+    <h3>📜 ÚLTIMAS 50 VENDAS</h3>
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Produto</th>
+                    <th>Qtd</th>
+                    <th>Total</th>
+                    <th>Pagamento</th>
+                    <th>Vendedor</th>
+                </tr>
+            </thead>
+            <tbody id="lista-vendas"></tbody>
+        </table>
+    </div>
+</div>
 
-    await FechamentoMensal.findOneAndUpdate({ mes }, { 
-        total_faturamento: faturamento, 
-        total_lucro: lucro, 
-        total_vendas_qtd: vendasMes.length 
-    }, { upsert: true });
-    res.json({ ok: true });
-});
+<script>
+    let meuGrafico = null;
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
+    async function carregarDados() {
+        try {
+            const res = await fetch('/relatorio-vendas');
+            const data = await res.json();
+
+            document.getElementById('total-hoje').innerText = `R$ ${data.totalHoje.toFixed(2)}`;
+            document.getElementById('lucro-hoje').innerText = `R$ ${data.lucroHoje.toFixed(2)}`;
+            document.getElementById('total-geral').innerText = `R$ ${data.totalGeral.toFixed(2)}`;
+            document.getElementById('lucro-geral').innerText = `R$ ${data.lucroGeral.toFixed(2)}`;
+
+            // Tabela de Vendas com CORES e VENDEDOR
+            document.getElementById('lista-vendas').innerHTML = data.historico.map(v => {
+                let badgeClass = 'bg-padrao';
+                if (v.forma_pagamento === 'Pix') badgeClass = 'bg-pix';
+                if (v.forma_pagamento === 'Dinheiro') badgeClass = 'bg-dinheiro';
+                if (v.forma_pagamento === 'Cartão') badgeClass = 'bg-cartao';
+
+                return `
+                    <tr>
+                        <td>${new Date(v.data_venda).toLocaleString()}</td>
+                        <td><strong>${v.nome_produto}</strong></td>
+                        <td>${v.quantidade}</td>
+                        <td>R$ ${v.valor_total.toFixed(2)}</td>
+                        <td><span class="badge ${badgeClass}">${v.forma_pagamento}</span></td>
+                        <td style="color: var(--primary); font-weight: bold;">👤 ${v.vendedor || '---'}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('lista-fechamentos').innerHTML = data.fechamentos.map(f => `
+                <tr>
+                    <td>${f.mes}</td>
+                    <td>R$ ${f.total_faturamento.toFixed(2)}</td>
+                    <td class="lucro">R$ ${f.total_lucro.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            carregarGrafico();
+            
+        } catch (e) {
+            console.error("Erro ao carregar dados");
+        }
+    }
+
+    async function carregarGrafico() {
+        const res = await fetch('/ranking-produtos');
+        const dados = await res.json();
+        const nomes = dados.map(item => item._id);
+        const quantidades = dados.map(item => item.totalVendido);
+        const ctx = document.getElementById('graficoProdutos').getContext('2d');
+        if (meuGrafico) { meuGrafico.destroy(); }
+        meuGrafico = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: nomes,
+                datasets: [{
+                    label: 'Qtd Vendida',
+                    data: quantidades,
+                    backgroundColor: '#6366f1',
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { display: false } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    async function fecharMes() {
+        const hoje = new Date();
+        const mesRef = `${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}`;
+        if (confirm(`Deseja fechar o relatório de ${mesRef}?`)) {
+            await fetch('/fechar-mes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mes: mesRef })
+            });
+            carregarDados();
+        }
+    }
+
+    async function carregarUser() {
+        const res = await fetch('/dados-usuario');
+        const user = await res.json();
+        if (user.nome) document.getElementById('user-info').innerText = `👤 ${user.nome}`;
+    }
+
+    carregarUser();
+    carregarDados();
+</script>
+</body>
+</html>
