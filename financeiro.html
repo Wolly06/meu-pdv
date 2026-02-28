@@ -3,191 +3,176 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Financeiro - DEV PDV v3.2</title>
+    <title>Financeiro - DEV PDV</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --primary: #6366f1; --success: #22c55e; --dark: #0f172a; --bg: #f8fafc; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 15px; color: var(--dark); overflow-x: hidden; }
+        :root { --primary: #6366f1; --success: #10b981; --danger: #ef4444; --dark: #0f172a; --gray: #64748b; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f1f5f9; margin: 0; padding: 20px; }
+        nav { background: var(--dark); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; border-radius: 12px; margin-bottom: 20px; }
+        .nav-btn { text-decoration: none; color: white; background: var(--primary); padding: 8px 15px; border-radius: 6px; font-weight: bold; }
         
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .btn-voltar { text-decoration: none; color: var(--primary); font-weight: bold; border: 1px solid var(--primary); padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; }
+        .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .card-stat { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
+        .card-stat h3 { margin: 0; color: var(--gray); font-size: 0.9rem; }
+        .card-stat p { margin: 10px 0 0; font-size: 1.8rem; font-weight: bold; color: var(--dark); }
+        .lucro { color: var(--success) !important; }
 
-        .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px; }
-        .card { background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
-        .card h3 { margin: 0; color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
-        .card p { margin: 8px 0 0; font-size: 1.3rem; font-weight: bold; }
-        .val-lucro { color: var(--success); }
-
-        /* NOVO ESTILO DO FILTRO */
-        .filtro-data { 
-            background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-            margin-bottom: 25px; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
-        }
-        .filtro-data input { padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; font-family: inherit; }
-        .btn-busca { background: var(--primary); color: white; border: none; padding: 9px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
-
-        .chart-container { 
-            background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-            margin-bottom: 25px; height: 300px; position: relative;
-        }
-
-        .secao { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; }
-        .secao h2 { margin-top: 0; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .container-flex { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .painel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         
-        .tabela-wrapper { 
-            width: 100%; 
-            overflow-x: auto; 
-            -webkit-overflow-scrolling: touch; 
-        }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { text-align: left; color: var(--gray); padding: 10px; border-bottom: 2px solid #f1f5f9; }
+        td { padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
 
-        table { width: 100%; min-width: 500px; border-collapse: collapse; }
-        th { text-align: left; padding: 12px; border-bottom: 2px solid #f1f5f9; color: #64748b; font-size: 0.8rem; }
-        td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
-
-        .btn-fechar { background: var(--primary); color: white; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+        .btn-fechar { background: var(--success); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         
-        .badge { 
-            display: inline-block; white-space: nowrap; padding: 4px 8px; 
-            border-radius: 6px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; 
-        }
-        .badge-pix { background: #dcfce7; color: #166534; }
-        .badge-dinheiro { background: #fef9c3; color: #854d0e; }
-        .badge-cartao { background: #dbeafe; color: #1e40af; }
+        /* Cores das Formas de Pagamento */
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; color: white; text-transform: uppercase; }
+        .bg-pix { background: #32bcad; }
+        .bg-dinheiro { background: #10b981; }
+        .bg-cartao { background: #6366f1; }
+        .bg-padrao { background: var(--gray); }
 
-        @media (max-width: 600px) {
-            .header h1 { font-size: 1.5rem; }
-            .card p { font-size: 1.1rem; }
-            .filtro-data { flex-direction: column; align-items: stretch; }
+        @media (max-width: 850px) {
+            .container-flex { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h1>📈 Estatísticas</h1>
-    <a href="/" class="btn-voltar">⬅ Sair</a>
+<nav>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <h2>💰 Painel Financeiro</h2>
+        <a href="/" class="nav-btn" style="background: var(--gray);">⬅ VOLTAR AO CAIXA</a>
+    </div>
+    <div id="user-info">👤 Carregando...</div>
+</nav>
+
+<div class="grid-stats">
+    <div class="card-stat">
+        <h3>VENDAS HOJE</h3>
+        <p id="total-hoje">R$ 0,00</p>
+    </div>
+    <div class="card-stat">
+        <h3>LUCRO HOJE</h3>
+        <p id="lucro-hoje" class="lucro">R$ 0,00</p>
+    </div>
+    <div class="card-stat">
+        <h3>FATURAMENTO GERAL</h3>
+        <p id="total-geral">R$ 0,00</p>
+    </div>
+    <div class="card-stat">
+        <h3>LUCRO GERAL</h3>
+        <p id="lucro-geral" class="lucro">R$ 0,00</p>
+    </div>
 </div>
 
-<div class="grid-cards">
-    <div class="card"><h3>Vendas (Hoje)</h3><p id="totalHoje">R$ 0,00</p></div>
-    <div class="card"><h3>Lucro (Hoje)</h3><p id="lucroHoje" class="val-lucro">R$ 0,00</p></div>
-    <div class="card"><h3>Total Geral</h3><p id="totalGeral">R$ 0,00</p></div>
-    <div class="card"><h3>Lucro Geral</h3><p id="lucroGeral" class="val-lucro">R$ 0,00</p></div>
-</div>
+<div class="container-flex">
+    <div class="painel">
+        <h3>📊 PRODUTOS MAIS VENDIDOS (TOP 10)</h3>
+        <div style="position: relative; height:300px; width:100%">
+            <canvas id="graficoProdutos"></canvas>
+        </div>
+    </div>
 
-<div class="filtro-data">
-    <span>📅 <strong>Filtrar Período:</strong></span>
-    <input type="date" id="dataInicio">
-    <span>até</span>
-    <input type="date" id="dataFim">
-    <button class="btn-busca" onclick="filtrarPorData()">🔍 BUSCAR</button>
-    <button class="btn-voltar" style="font-size: 0.7rem;" onclick="carregarDados()">VER TUDO</button>
-</div>
-
-<div class="chart-container">
-    <canvas id="meuGrafico"></canvas>
-</div>
-
-<div class="secao">
-    <h2>📂 Fechamentos Mensais <button class="btn-fechar" onclick="gerarFechamento()">Fechar Mês</button></h2>
-    <div class="tabela-wrapper">
+    <div class="painel">
+        <h3>📅 FECHAMENTO MENSAL</h3>
+        <button class="btn-fechar" onclick="fecharMes()">GERAR FECHAMENTO DESTE MÊS</button>
         <table>
-            <thead><tr><th>Mês/Ano</th><th>Faturamento</th><th>Lucro</th><th>Vendas</th></tr></thead>
-            <tbody id="tabelaFechamentos"></tbody>
+            <thead>
+                <tr>
+                    <th>Mês/Ano</th>
+                    <th>Faturamento</th>
+                    <th>Lucro</th>
+                </tr>
+            </thead>
+            <tbody id="lista-fechamentos"></tbody>
         </table>
     </div>
 </div>
 
-<div class="secao">
-    <h2 id="titulo-atividades">🕒 Atividades Recentes</h2>
-    <div class="tabela-wrapper">
+<div class="painel" style="margin-top: 20px;">
+    <h3>📜 ÚLTIMAS 50 VENDAS</h3>
+    <div style="overflow-x: auto;">
         <table>
-            <thead><tr><th>Data/Hora</th><th>Item</th><th>Total</th><th>Pagamento</th></tr></thead>
-            <tbody id="tabelaVendas"></tbody>
+            <thead>
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Produto</th>
+                    <th>Qtd</th>
+                    <th>Total</th>
+                    <th>Pagamento</th>
+                    <th>Vendedor</th>
+                </tr>
+            </thead>
+            <tbody id="lista-vendas"></tbody>
         </table>
     </div>
 </div>
 
 <script>
-    let chartInstancia = null;
-    let historicoCompleto = []; // Para filtrar sem precisar carregar do banco de novo
+    let meuGrafico = null;
 
     async function carregarDados() {
-        const res = await fetch('/relatorio-vendas');
-        const data = await res.json();
-        historicoCompleto = data.historico;
+        try {
+            const res = await fetch('/relatorio-vendas');
+            const data = await res.json();
 
-        document.getElementById('totalHoje').innerText = `R$ ${data.totalHoje.toFixed(2)}`;
-        document.getElementById('lucroHoje').innerText = `R$ ${data.lucroHoje.toFixed(2)}`;
-        document.getElementById('totalGeral').innerText = `R$ ${data.totalGeral.toFixed(2)}`;
-        document.getElementById('lucroGeral').innerText = `R$ ${data.lucroGeral.toFixed(2)}`;
+            document.getElementById('total-hoje').innerText = `R$ ${data.totalHoje.toFixed(2)}`;
+            document.getElementById('lucro-hoje').innerText = `R$ ${data.lucroHoje.toFixed(2)}`;
+            document.getElementById('total-geral').innerText = `R$ ${data.totalGeral.toFixed(2)}`;
+            document.getElementById('lucro-geral').innerText = `R$ ${data.lucroGeral.toFixed(2)}`;
 
-        renderizarTabela(historicoCompleto);
-        document.getElementById('titulo-atividades').innerText = "🕒 Atividades Recentes";
+            // Tabela de Vendas com CORES e VENDEDOR
+            document.getElementById('lista-vendas').innerHTML = data.historico.map(v => {
+                let badgeClass = 'bg-padrao';
+                if (v.forma_pagamento === 'Pix') badgeClass = 'bg-pix';
+                if (v.forma_pagamento === 'Dinheiro') badgeClass = 'bg-dinheiro';
+                if (v.forma_pagamento === 'Cartão') badgeClass = 'bg-cartao';
 
-        document.getElementById('tabelaFechamentos').innerHTML = data.fechamentos.map(f => `
-            <tr>
-                <td><b>${f.mes}</b></td>
-                <td>R$ ${f.total_faturamento.toFixed(2)}</td>
-                <td class="val-lucro">R$ ${f.total_lucro.toFixed(2)}</td>
-                <td>${f.total_vendas_qtd}</td>
-            </tr>
-        `).join('');
+                return `
+                    <tr>
+                        <td>${new Date(v.data_venda).toLocaleString()}</td>
+                        <td><strong>${v.nome_produto}</strong></td>
+                        <td>${v.quantidade}</td>
+                        <td>R$ ${v.valor_total.toFixed(2)}</td>
+                        <td><span class="badge ${badgeClass}">${v.forma_pagamento}</span></td>
+                        <td style="color: var(--primary); font-weight: bold;">👤 ${v.vendedor || '---'}</td>
+                    </tr>
+                `;
+            }).join('');
 
-        renderizarGrafico(historicoCompleto);
-    }
+            document.getElementById('lista-fechamentos').innerHTML = data.fechamentos.map(f => `
+                <tr>
+                    <td>${f.mes}</td>
+                    <td>R$ ${f.total_faturamento.toFixed(2)}</td>
+                    <td class="lucro">R$ ${f.total_lucro.toFixed(2)}</td>
+                </tr>
+            `).join('');
 
-    // Função para renderizar apenas a tabela de vendas
-    function renderizarTabela(lista) {
-        document.getElementById('tabelaVendas').innerHTML = lista.map(v => `
-            <tr>
-                <td>${new Date(v.data_venda).toLocaleDateString('pt-BR')} ${new Date(v.data_venda).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</td>
-                <td>${v.nome_produto}</td>
-                <td><b>R$ ${v.valor_total.toFixed(2)}</b></td>
-                <td><span class="badge badge-${v.forma_pagamento.toLowerCase()}">${v.forma_pagamento}</span></td>
-            </tr>
-        `).join('');
-    }
-
-    // NOVA FUNÇÃO DE FILTRO
-    function filtrarPorData() {
-        const inicio = document.getElementById('dataInicio').value;
-        const fim = document.getElementById('dataFim').value;
-
-        if (!inicio || !fim) {
-            alert("Escolha a data de início e fim!");
-            return;
+            carregarGrafico();
+            
+        } catch (e) {
+            console.error("Erro ao carregar dados");
         }
-
-        const filtradas = historicoCompleto.filter(v => {
-            const dataVenda = v.data_venda.split('T')[0]; // Pega YYYY-MM-DD
-            return dataVenda >= inicio && dataVenda <= fim;
-        });
-
-        renderizarTabela(filtradas);
-        document.getElementById('titulo-atividades').innerText = `🔎 Resultados de ${inicio.split('-').reverse().join('/')} até ${fim.split('-').reverse().join('/')}`;
     }
 
-    function renderizarGrafico(historico) {
-        const ctx = document.getElementById('meuGrafico').getContext('2d');
-        const ultimasVendas = [...historico].reverse().slice(-10);
-        const labels = ultimasVendas.map(v => new Date(v.data_venda).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}));
-        const valores = ultimasVendas.map(v => v.valor_total);
-
-        if (chartInstancia) chartInstancia.destroy();
-
-        chartInstancia = new Chart(ctx, {
-            type: 'line',
+    async function carregarGrafico() {
+        const res = await fetch('/ranking-produtos');
+        const dados = await res.json();
+        const nomes = dados.map(item => item._id);
+        const quantidades = dados.map(item => item.totalVendido);
+        const ctx = document.getElementById('graficoProdutos').getContext('2d');
+        if (meuGrafico) { meuGrafico.destroy(); }
+        meuGrafico = new Chart(ctx, {
+            type: 'bar',
             data: {
-                labels: labels,
+                labels: nomes,
                 datasets: [{
-                    label: 'Vendas (R$)',
-                    data: valores,
-                    borderColor: '#6366f1',
-                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 3
+                    label: 'Qtd Vendida',
+                    data: quantidades,
+                    backgroundColor: '#6366f1',
+                    borderRadius: 8
                 }]
             },
             options: {
@@ -195,26 +180,34 @@
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    y: { beginAtZero: true, ticks: { font: { size: 10 } } },
-                    x: { ticks: { font: { size: 10 } } }
+                    y: { beginAtZero: true, grid: { display: false } },
+                    x: { grid: { display: false } }
                 }
             }
         });
     }
 
-    async function gerarFechamento() {
-        const mesRef = `${(new Date().getMonth() + 1).toString().padStart(2, '0')}/${new Date().getFullYear()}`;
-        if(!confirm(`Fechar o mês ${mesRef}?`)) return;
-        const res = await fetch('/fechar-mes', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ mes: mesRef })
-        });
-        if(res.ok) { alert("Mês fechado!"); carregarDados(); }
+    async function fecharMes() {
+        const hoje = new Date();
+        const mesRef = `${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}`;
+        if (confirm(`Deseja fechar o relatório de ${mesRef}?`)) {
+            await fetch('/fechar-mes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mes: mesRef })
+            });
+            carregarDados();
+        }
     }
 
+    async function carregarUser() {
+        const res = await fetch('/dados-usuario');
+        const user = await res.json();
+        if (user.nome) document.getElementById('user-info').innerText = `👤 ${user.nome}`;
+    }
+
+    carregarUser();
     carregarDados();
 </script>
-
 </body>
 </html>
